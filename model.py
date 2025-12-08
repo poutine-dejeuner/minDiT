@@ -3,22 +3,33 @@ import torch.nn as nn
 from transformer import TransformerBlock
 from diffusion import Diffusion
 
+
 class DiT(nn.Module):
     """
     Diffusion Transformer (DiT) model.
     """
+
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.diffusion = Diffusion(config)
 
         # patchify turns a 2D image into a 1D sequence of tokens see fig 4
-        self.patchify = nn.Conv2d(config.in_channels, config.dim, 
-                                  kernel_size=config.patch_size, 
+        self.patchify = nn.Conv2d(config.in_channels, config.dim,
+                                  kernel_size=config.patch_size,
                                   stride=config.patch_size)
 
         # ViT frequency-based positional embeddings
-        self.pos_embedding = nn.Parameter(torch.randn(1, config.img_size // config.patch_size, config.dim))
+        if isinstance(config.img_size, tuple):
+            num_patches = (config.img_size[0] // config.patch_size * config.img_size[1]
+                           // config.patch_size)
+        elif isinstance(config.img_size, int):
+            num_patches = (config.img_size // config.patch_size) ** 2
+        else:
+            raise
+
+        self.pos_embedding = nn.Parameter(
+            torch.randn(1, num_patches, config.dim))
 
         # transformer blocks
         self.transformer_blocks = nn.Sequential(
@@ -26,7 +37,8 @@ class DiT(nn.Module):
         )
 
         # decoder takes the sequence of tokens and turns it back into a 2D image
-        self.decoder = nn.Linear(config.dim, config.patch_size * config.patch_size * config.in_channels)
+        self.decoder = nn.Linear(
+            config.dim, config.patch_size * config.patch_size * config.in_channels)
 
     def forward(self, x, t):
         """
@@ -34,17 +46,29 @@ class DiT(nn.Module):
         """
         # patchify turns a 2D image into a 1D sequence of tokens see fig 4
         x = self.patchify(x).flatten(2).transpose(1, 2)
-        
+
         # add positional embeddings
         x = x + self.pos_embedding
-        
+
         # pass through transformer blocks
         x = self.transformer_blocks(x)
-        
+        self._last_repr = x
+
         # decoder takes the sequence of tokens and turns it back into a 2D image
-        x = self.decoder(x).transpose(1, 2).contiguous().view(x.size(0), self.config.in_channels, self.config.img_size, self.config.img_size)
-        
+        if isinstance(self.config.img_size, tuple):
+            x = self.decoder(x).transpose(1, 2).contiguous().view(
+                x.size(0), self.config.in_channels, *self.config.img_size)
+        else:
+            x = self.decoder(x).transpose(1, 2).contiguous().view(
+                x.size(0), self.config.in_channels, self.config.img_size, self.config.img_size)
+
         return x
+
+    def last_repr(self):
+        if not hasattr(self, '_last_repr'):
+            raise AttributeError(
+                "last_repr is not initialized yet. Please run forward() first.")
+        return self._last_repr
 
     def sample(self, num_samples, steps, seed=None):
         """
@@ -52,11 +76,13 @@ class DiT(nn.Module):
         """
 
         # start from pure noise
-        x = torch.randn(num_samples, self.config.in_channels, self.config.img_size, self.config.img_size).to(self.patchify.weight.device)
+        x = torch.randn(num_samples, self.config.in_channels, self.config.img_size,
+                        self.config.img_size).to(self.patchify.weight.device)
 
         # reverse diffusion process
         for t in reversed(range(steps)):
-            t_tensor = torch.tensor([t] * num_samples, dtype=torch.long).to(x.device)
+            t_tensor = torch.tensor(
+                [t] * num_samples, dtype=torch.long).to(x.device)
             noise_pred = self(x, t_tensor)
             x = self.diffusion.reverse_diffusion_step(x, noise_pred, t)
 

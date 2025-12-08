@@ -1,22 +1,44 @@
-import torch
-from torch import nn
 from model import DiT
+from pathlib import Path
+from utils import TopoAlgoType
 
 class DiTConfig:
     """
     a simple small config
     """
     def __init__(self):
-        self.img_size = 256  # Size of the input images
+        self.debug = False #True
+        self.device = "cuda"
+
+        # Data
+        self.img_size = (101, 91) # Size of the input images
+
+        # Model
         self.patch_size = 4   # Size of each patch
         self.dim = 768        # Embedding dimension
         self.depth = 12       # Number of transformer blocks
         self.heads = 12       # Number of attention heads
         self.mlp_dim = 3072   # Dimensions of the multilayer perceptron in the transformer block
-        self.in_channels = 3  # Number of input channels
+        self.in_channels = 1  # Number of input channels
+        self.dtype = float
+
+        # Diffusion
         self.timesteps = 1000 # Number of timesteps for diffusion
         self.beta_start = 0.0001
         self.beta_end = 0.02
+
+        # Training
+        self.epochs = 1000 if not self.debug else 1
+        self.batch_size = 32
+
+        # Manifold matching configs
+        self.mm_reg_alpha = 1.0
+        self.data_path = Path("./data/photo/images.npy")
+        self.topo_algo = TopoAlgoType["PCA"]
+        self.n_components = 100
+
+        # Logger
+        self.log_step = 10
 
     def start(self):
         return DiT(self)
