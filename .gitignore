@@ -1,5 +1,7 @@
-/wandb
+wandb/
 __pycache__/
 data/
+output/
+slurm/
 
 

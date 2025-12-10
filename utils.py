@@ -46,8 +46,8 @@ class TopoAlgoType(enum.Enum):
 
 
 def get_dataloader(data_path: Path, dtype, topo_algo: TopoAlgoType,
-                   n_components: int, batch_size: int):
-    data = np.load(data_path)
+        n_components: int, batch_size: int, dataset_size: int):
+    data = np.load(data_path)[:dataset_size]
     if data.ndim < 4:
         data = np.reshape(data, (data.shape[0], 1) + data.shape[1:])
     topo_repr = topo_representation(data, topo_algo, n_components)

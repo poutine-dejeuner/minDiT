@@ -18,6 +18,15 @@ import builtins
 install()
 builtins.sys = sys
 
+def sample_model(model, epoch, samples_dir, cfg):
+    print('Sampling')
+    with torch.no_grad():
+        samples = model.sample(num_samples=cfg.n_gen, steps=cfg.timesteps)
+        sample_path = os.path.join(samples_dir, f'epoch_{epoch}.png')
+        save_image(samples, sample_path, normalize=True)
+        # wandb.log({"samples": wandb.Image(sample_path)})
+        del samples
+        torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
 def train_model():
     # cfguration
@@ -29,7 +38,8 @@ def train_model():
 
     # data
     dataloader = get_dataloader(cfg.data_path, cfg.dtype, cfg.topo_algo,
-                                cfg.n_components, cfg.batch_size)
+                                cfg.n_components, cfg.batch_size,
+                                cfg.dataset_size)
     cfg.img_size = tuple(dataloader.dataset.tensors[0].shape[-2:])
 
     # model
@@ -42,7 +52,8 @@ def train_model():
     # training loop
     for epoch in range(cfg.epochs):
         epoch_loss = 0
-        for x, topo_repr in tqdm(dataloader, disable=not cfg.debug):
+        # for x, topo_repr in tqdm(dataloader, disable=not cfg.debug):
+        for x, topo_repr in tqdm(dataloader):
             x = x.to(cfg.device)
             topo_repr = topo_repr.to(cfg.device)
             
@@ -69,6 +80,9 @@ def train_model():
             del xt, noise, output, loss
             torch.cuda.empty_cache() if torch.cuda.is_available() else None
 
+            if cfg.debug:
+                break
+
         avg_loss = epoch_loss / len(dataloader)
         print(f'Epoch {epoch}, Loss: {avg_loss}')
 
@@ -82,16 +96,11 @@ def train_model():
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'loss': avg_loss,
-        }, os.path.join(checkpoint_dir, f'checkpoint_epoch_{epoch}.pt'))
+        }, os.path.join(checkpoint_dir, 'checkpoint.pt'))
 
         # sample and save images
-        with torch.no_grad():
-            samples = model.sample(num_samples=8, steps=cfg.timesteps)
-            sample_path = os.path.join(samples_dir, f'epoch_{epoch}.png')
-            save_image(samples, sample_path, normalize=True)
-            wandb.log({"samples": wandb.Image(sample_path)})
-            del samples
-            torch.cuda.empty_cache() if torch.cuda.is_available() else None
+        if epoch % cfg.eval_step == 0:
+            sample_model(model, epoch, samples_dir, cfg)
 
 
 if __name__ == "__main__":

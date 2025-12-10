@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from transformer import TransformerBlock
 from diffusion import Diffusion
+from tqdm import tqdm
 
 
 class DiT(nn.Module):
@@ -76,13 +77,18 @@ class DiT(nn.Module):
         """
 
         # start from pure noise
-        x = torch.randn(num_samples, self.config.in_channels, self.config.img_size,
-                        self.config.img_size).to(self.patchify.weight.device)
+        if isinstance(self.config.img_size, tuple):
+            x = torch.randn(num_samples, self.config.in_channels, *self.config.img_size,
+                            device=self.config.device, dtype=self.config.dtype)
+        elif isinstance(self.config.img_size, int):
+            x = torch.randn(num_samples, self.config.in_channels, self.config.img_size,
+                            self.config.img_size, device=self.config.device,
+                            dtype=self.config.dtype)
 
         # reverse diffusion process
-        for t in reversed(range(steps)):
+        for t in tqdm(reversed(range(steps)), disable=not self.config.debug):
             t_tensor = torch.tensor(
-                [t] * num_samples, dtype=torch.long).to(x.device)
+                [t] * num_samples, dtype=self.config.dtype).to(x.device)
             noise_pred = self(x, t_tensor)
             x = self.diffusion.reverse_diffusion_step(x, noise_pred, t)
 

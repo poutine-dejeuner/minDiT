@@ -1,5 +1,5 @@
 from model import DiT
-from pathlib import Path
+FROM Pathlib import Path
 from utils import TopoAlgoType
 
 class DiTConfig:
@@ -7,11 +7,13 @@ class DiTConfig:
     a simple small config
     """
     def __init__(self):
-        self.debug = False #True
+        self.debug = False
+        # self.debug = True
         self.device = "cuda"
 
         # Data
         self.img_size = (101, 91) # Size of the input images
+        self.dataset_size = -1 if not self.debug else 32
 
         # Model
         self.patch_size = 4   # Size of each patch
@@ -23,7 +25,7 @@ class DiTConfig:
         self.dtype = float
 
         # Diffusion
-        self.timesteps = 1000 # Number of timesteps for diffusion
+        self.timesteps = 100 # Number of timesteps for diffusion
         self.beta_start = 0.0001
         self.beta_end = 0.02
 
@@ -38,7 +40,12 @@ class DiTConfig:
         self.n_components = 100
 
         # Logger
-        self.log_step = 10
+        self.log_step = 1
+
+        # Sampling
+        self.eval_step = 100
+        self.n_gen = 16
+
 
     def start(self):
         return DiT(self)
