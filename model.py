@@ -71,6 +71,7 @@ class DiT(nn.Module):
                 "last_repr is not initialized yet. Please run forward() first.")
         return self._last_repr
 
+    @torch.no_grad()
     def sample(self, num_samples, steps, seed=None):
         """
         samples new images from the model using reverse diffusio
@@ -85,10 +86,13 @@ class DiT(nn.Module):
                             self.config.img_size, device=self.config.device,
                             dtype=self.config.dtype)
 
+        # pre-allocate timestep tensor for efficiency
+        t_tensor = torch.zeros(num_samples, dtype=torch.long, device=x.device)
+        
         # reverse diffusion process
-        for t in tqdm(reversed(range(steps)), disable=not self.config.debug):
-            t_tensor = torch.tensor(
-                [t] * num_samples, dtype=self.config.dtype).to(x.device)
+        # for t in tqdm(reversed(range(steps)), disable=not self.config.debug):
+        for t in reversed(range(steps)):
+            t_tensor.fill_(t)
             noise_pred = self(x, t_tensor)
             x = self.diffusion.reverse_diffusion_step(x, noise_pred, t)
 

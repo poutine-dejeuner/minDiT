@@ -11,6 +11,22 @@ from datetime import datetime
 from pathlib import Path
 
 
+def mmreg(x_nn_embed, x_topo_embed_dist, alpha=1.0):
+    eps = 1e-8
+    N = x_nn_embed.shape[0]
+    x_flat = x_nn_embed.reshape(N, -1)
+    xdist = torch.cdist(x_flat, x_flat)
+    xdistnorm = torch.norm(xdist, p="fro") 
+    xdist = xdist / (xdistnorm + eps)
+    x_embeddist = x_topo_embed_dist
+    x_embeddistnorm = torch.norm(x_embeddist, p="fro")
+    x_embeddist = x_embeddist / (x_embeddistnorm + eps)
+
+    reg_term = alpha * (1 / N ** 2) * torch.norm(xdist - x_embeddist, p="fro")
+
+    return reg_term
+
+
 def manifold_matching_reg(x, x_embed, alpha=1.0):
     """
     Compute a manifold matching regularization term between original data and embeddings.
@@ -24,13 +40,21 @@ def manifold_matching_reg(x, x_embed, alpha=1.0):
     Returns:
         Scalar tensor representing the regularization loss
     """
-
+    eps = 1e-8
     N = x.shape[0]
-    x = x.reshape(N, -1)
-    xdist = torch.cdist(x, x)
-    xdist = xdist / torch.norm(xdist, p="fro")
+    x_flat = x.reshape(N, -1)
+    xdist = torch.cdist(x_flat, x_flat)
+    xdistnorm = torch.norm(xdist, p="fro") 
+    xdist = xdist / (xdistnorm + eps)
     x_embeddist = torch.cdist(x_embed, x_embed)
-    x_embeddist = x_embeddist / torch.norm(x_embeddist, p="fro")
+    x_embeddistnorm = torch.norm(x_embeddist, p="fro")
+    x_embeddist = x_embeddist / (x_embeddistnorm + eps)
+    if not torch.is_nonzero(xdistnorm): 
+        np.save("buggy_x.npy", x.detach().cpu().numpy())
+        breakpoint()
+    if not torch.is_nonzero(x_embeddistnorm):
+        np.save("buggy_xemb.npy", x_embed.detach().cpu().numpy())
+        breakpoint()
     reg_term = alpha * (1 / N ** 2) * torch.norm(xdist - x_embeddist, p="fro")
 
     return reg_term
@@ -43,6 +67,35 @@ class TopoAlgoType(enum.Enum):
     PCA = enum.auto()
     UMAP = enum.auto()
     TSNE = enum.auto()
+
+
+class IndexDataset(Dataset):
+    def __init__(self, dataset):
+        self.dataset = dataset
+
+    def __getitem__(self, index):
+        return self.dataset[index], index
+
+    def __len__(self):
+        return len(self.dataset)
+
+
+def get_dataset_and_topo_repr(data_path: Path, dtype, topo_algo: TopoAlgoType,
+        n_components: int, dataset_size: int):
+    data = np.load(data_path)[:dataset_size]
+    if data.ndim < 4:
+        data = np.reshape(data, (data.shape[0], 1) + data.shape[1:])
+    topo_repr = topo_representation(data, topo_algo, n_components)
+    topo_repr = torch.from_numpy(topo_repr).to(dtype)
+    data = torch.from_numpy(data).to(dtype)
+    topo_repr = torch.cdist(topo_repr, topo_repr)
+
+    # pad
+    pad_fn = PadToDivisible(divisor=8)
+    data = pad_fn(data)
+
+    dataset = TensorDataset(data)
+    return dataset, topo_repr
 
 
 def get_dataloader(data_path: Path, dtype, topo_algo: TopoAlgoType,

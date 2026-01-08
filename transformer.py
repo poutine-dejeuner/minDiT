@@ -2,18 +2,6 @@ import torch
 import torch.nn as nn
 import numpy as np
 
-class LayerNorm(nn.Module):
-    """
-     simple layer norm 
-    """
-    def __init__(self, dim, eps=1e-6):
-        super().__init__()
-        self.eps = eps
-
-    def forward(self, x):
-        mean = torch.mean(x, dim=-1, keepdim=True)
-        std = torch.std(x, dim=-1, keepdim=True)
-        return (x - mean) / (std + self.eps)
 
 class SelfAttention(nn.Module):
     """
@@ -44,9 +32,10 @@ class TransformerBlock(nn.Module):
     """
     def __init__(self, dim, heads, mlp_dim):
         super().__init__()
-        self.ln1 = LayerNorm(dim)
+        eps = 1e-6
+        self.ln1 = nn.LayerNorm(dim, eps=eps)
         self.attn = SelfAttention(dim, heads)
-        self.ln2 = LayerNorm(dim)
+        self.ln2 = nn.LayerNorm(dim, eps=eps)
         self.mlp = nn.Sequential(
             nn.Linear(dim, mlp_dim),
             nn.ReLU(),
